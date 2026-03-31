@@ -1,0 +1,29 @@
+<RCC>
+    <qresource prefix="/">
+        <file>wallpapers/wallpaper1.jpg</file>
+        <file>wallpapers/wallpaper2.jpg</file>
+        <file>wallpapers/wallpaper3.jpg</file>
+        <file>wallpapers/wallpaper4.jpg</file>
+        <file>wallpapers/wallpaper5.jpg</file>
+        <file>wallpapers/wallpaper6.jpg</file>
+        <file>wallpapers/wallpaper7.jpg</file>
+        <file>wallpapers/wallpaper8.jpg</file>
+        <file>wallpapers/wallpaper9.jpg</file>
+        <file>wallpapers/wallpaper10.jpg</file>
+        <file>wallpapers/wallpaper11.jpg</file>
+        <file>wallpapers/wallpaper12.jpg</file>
+        <file>wallpapers/wallpaper13.jpg</file>
+        <file>wallpapers/wallpaper14.jpg</file>
+        <file>wallpapers/wallpaper15.jpg</file>
+        <file>wallpapers/wallpaper16.jpg</file>
+        <file>wallpapers/wallpaper17.jpg</file>
+        <file>wallpapers/wallpaper18.jpg</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="openscreen.png">icons/openscreen.png</file>
+    </qresource>
+    <qresource prefix="/shaders">
+        <file alias="default.vert">shaders/default.vert</file>
+        <file alias="default.frag">shaders/default.frag</file>
+    </qresource>
+</RCC>
