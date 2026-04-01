@@ -3,10 +3,16 @@
 #include "SourceSelector.h"
 #include "capture/RecordingSession.h"
 #include "capture/ScreenCapture.h"
+#include "ui/editor/VideoPreview.h"
+#include "ui/editor/PlaybackControls.h"
+#include "render/PlaybackEngine.h"
+#include "core/EditorState.h"
 
 #include <QAction>
 #include <QDateTime>
 #include <QDebug>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSplitter>
@@ -27,6 +33,7 @@ MainWindow::MainWindow(QWidget* parent)
     createCentralArea();
     createStatusBar();
     setupRecording();
+    setupPlayback();
 }
 
 void MainWindow::createMenuBar()
@@ -40,8 +47,11 @@ void MainWindow::createMenuBar()
     connect(newAction, &QAction::triggered, this, &MainWindow::onNewProject);
 
     auto* openAction = fileMenu->addAction(tr("&Open Project"));
-    openAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_O));
     connect(openAction, &QAction::triggered, this, &MainWindow::onOpenProject);
+
+    auto* openVideoAction = fileMenu->addAction(tr("Open &Video..."));
+    openVideoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_O));
+    connect(openVideoAction, &QAction::triggered, this, &MainWindow::onOpenVideo);
 
     auto* saveAction = fileMenu->addAction(tr("&Save Project"));
     saveAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
@@ -124,25 +134,33 @@ void MainWindow::createCentralArea()
     // Horizontal splitter: preview | settings
     splitter_ = new QSplitter(Qt::Horizontal, centralWidget);
 
-    preview_placeholder_ = new QWidget(splitter_);
-    preview_placeholder_->setObjectName("preview_placeholder");
-    preview_placeholder_->setMinimumWidth(400);
+    videoPreview_ = new VideoPreview(splitter_);
+    videoPreview_->setObjectName("video_preview");
+    videoPreview_->setMinimumWidth(400);
 
     settings_placeholder_ = new QWidget(splitter_);
     settings_placeholder_->setObjectName("settings_placeholder");
     settings_placeholder_->setMinimumWidth(200);
 
-    splitter_->addWidget(preview_placeholder_);
+    splitter_->addWidget(videoPreview_);
     splitter_->addWidget(settings_placeholder_);
     splitter_->setStretchFactor(0, 3);
     splitter_->setStretchFactor(1, 1);
 
     mainLayout->addWidget(splitter_, 3);
 
-    // Timeline placeholder below the splitter
+    // Timeline area below the splitter: playback controls + future timeline
     timeline_placeholder_ = new QWidget(centralWidget);
-    timeline_placeholder_->setObjectName("timeline_placeholder");
+    timeline_placeholder_->setObjectName("timeline_area");
     timeline_placeholder_->setMinimumHeight(150);
+
+    auto* timelineLayout = new QVBoxLayout(timeline_placeholder_);
+    timelineLayout->setContentsMargins(0, 0, 0, 0);
+    timelineLayout->setSpacing(0);
+
+    playbackControls_ = new PlaybackControls(timeline_placeholder_);
+    timelineLayout->addWidget(playbackControls_);
+    timelineLayout->addStretch(1); // space for future timeline widget
 
     mainLayout->addWidget(timeline_placeholder_, 1);
 
@@ -280,6 +298,11 @@ void MainWindow::onRecordingStopped(const QString& outputPath)
     show();
     statusBar()->showMessage(
         tr("Recording saved: %1").arg(outputPath), 5000);
+
+    // Automatically load the recorded video for editing
+    if (!outputPath.isEmpty()) {
+        playbackEngine_->loadVideo(outputPath.toStdString());
+    }
 }
 
 void MainWindow::onShowSourceSelector()
@@ -294,6 +317,73 @@ void MainWindow::onShowSourceSelector()
 
     sourceSelector_->setSources(sourceList);
     sourceSelector_->show();
+}
+
+void MainWindow::setupPlayback()
+{
+    editorHistory_ = new EditorHistory();
+    playbackEngine_ = new PlaybackEngine(this);
+    playbackEngine_->setEditorState(&editorHistory_->state());
+
+    // Engine -> VideoPreview
+    connect(playbackEngine_, &PlaybackEngine::frameReady,
+            videoPreview_, &VideoPreview::setFrame);
+    connect(playbackEngine_, &PlaybackEngine::zoomChanged,
+            videoPreview_, &VideoPreview::setZoom);
+
+    // Engine -> PlaybackControls
+    connect(playbackEngine_, &PlaybackEngine::positionChanged,
+            playbackControls_, &PlaybackControls::setCurrentTime);
+    connect(playbackEngine_, &PlaybackEngine::playbackStateChanged,
+            playbackControls_, &PlaybackControls::setPlaying);
+
+    // PlaybackControls -> Engine
+    connect(playbackControls_, &PlaybackControls::playPauseToggled, this,
+        [this](bool playing) {
+            if (playing) {
+                playbackEngine_->play();
+            } else {
+                playbackEngine_->pause();
+            }
+        });
+    connect(playbackControls_, &PlaybackControls::seekRequested,
+            playbackEngine_, &PlaybackEngine::seekTo);
+
+    // VideoPreview focus click (store for future zoom-to-click)
+    connect(videoPreview_, &VideoPreview::focusClicked, this,
+        [this](double nx, double ny) {
+            qDebug() << "Focus clicked:" << nx << ny;
+        });
+
+    // Video loaded -> update UI
+    connect(playbackEngine_, &PlaybackEngine::videoLoaded,
+            this, &MainWindow::onVideoLoaded);
+}
+
+void MainWindow::onOpenVideo()
+{
+    auto filePath = QFileDialog::getOpenFileName(
+        this,
+        tr("Open Video"),
+        QStandardPaths::writableLocation(QStandardPaths::MoviesLocation),
+        tr("Video Files (*.mp4 *.webm *.mkv *.mov)"));
+
+    if (filePath.isEmpty()) {
+        return;
+    }
+
+    if (!playbackEngine_->loadVideo(filePath.toStdString())) {
+        statusBar()->showMessage(tr("Failed to load video: %1").arg(filePath), 5000);
+    }
+}
+
+void MainWindow::onVideoLoaded(const QString& filePath)
+{
+    playbackControls_->setDuration(playbackEngine_->durationMs());
+
+    auto filename = QFileInfo(filePath).fileName();
+    setWindowTitle(tr("OpenScreen - %1").arg(filename));
+    statusBar()->showMessage(tr("Loaded: %1").arg(filename), 3000);
 }
 
 } // namespace openscreen
