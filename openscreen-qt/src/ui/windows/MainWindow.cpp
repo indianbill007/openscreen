@@ -7,6 +7,8 @@
 #include "ui/editor/PlaybackControls.h"
 #include "render/PlaybackEngine.h"
 #include "core/EditorState.h"
+#include "ui/timeline/TimelineWidget.h"
+#include "ui/timeline/TimelineController.h"
 
 #include <QAction>
 #include <QDateTime>
@@ -160,7 +162,10 @@ void MainWindow::createCentralArea()
 
     playbackControls_ = new PlaybackControls(timeline_placeholder_);
     timelineLayout->addWidget(playbackControls_);
-    timelineLayout->addStretch(1); // space for future timeline widget
+
+    timelineWidget_ = new TimelineWidget(timeline_placeholder_);
+    timelineWidget_->setObjectName("timeline_widget");
+    timelineLayout->addWidget(timelineWidget_, 1);
 
     mainLayout->addWidget(timeline_placeholder_, 1);
 
@@ -355,6 +360,14 @@ void MainWindow::setupPlayback()
             qDebug() << "Focus clicked:" << nx << ny;
         });
 
+    // Timeline controller: bridges TimelineWidget <-> EditorHistory
+    timelineController_ = new TimelineController(
+        timelineWidget_, editorHistory_, playbackEngine_, this);
+
+    // Engine position -> timeline playhead
+    connect(playbackEngine_, &PlaybackEngine::positionChanged,
+            timelineWidget_, &TimelineWidget::setPlayheadPosition);
+
     // Video loaded -> update UI
     connect(playbackEngine_, &PlaybackEngine::videoLoaded,
             this, &MainWindow::onVideoLoaded);
@@ -379,7 +392,11 @@ void MainWindow::onOpenVideo()
 
 void MainWindow::onVideoLoaded(const QString& filePath)
 {
-    playbackControls_->setDuration(playbackEngine_->durationMs());
+    const auto durationMs = playbackEngine_->durationMs();
+
+    playbackControls_->setDuration(durationMs);
+    timelineWidget_->setDuration(durationMs);
+    timelineController_->syncFromState();
 
     auto filename = QFileInfo(filePath).fileName();
     setWindowTitle(tr("OpenScreen - %1").arg(filename));

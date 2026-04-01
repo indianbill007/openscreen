@@ -15,6 +15,8 @@ class VideoPreview;
 class PlaybackControls;
 class PlaybackEngine;
 class EditorHistory;
+class TimelineWidget;
+class TimelineController;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -62,6 +64,8 @@ private:
     PlaybackControls* playbackControls_{nullptr};
     PlaybackEngine* playbackEngine_{nullptr};
     EditorHistory* editorHistory_{nullptr};
+    TimelineWidget* timelineWidget_{nullptr};
+    TimelineController* timelineController_{nullptr};
 };
 
 } // namespace openscreen
