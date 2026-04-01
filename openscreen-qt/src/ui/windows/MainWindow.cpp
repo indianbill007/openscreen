@@ -1,10 +1,16 @@
 #include "MainWindow.h"
+#include "HudOverlay.h"
+#include "SourceSelector.h"
+#include "capture/RecordingSession.h"
+#include "capture/ScreenCapture.h"
 
 #include <QAction>
+#include <QDateTime>
 #include <QDebug>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSplitter>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -20,6 +26,7 @@ MainWindow::MainWindow(QWidget* parent)
     createMenuBar();
     createCentralArea();
     createStatusBar();
+    setupRecording();
 }
 
 void MainWindow::createMenuBar()
@@ -94,6 +101,11 @@ void MainWindow::createMenuBar()
             settings_placeholder_->setVisible(checked);
         }
     });
+
+    viewMenu->addSeparator();
+
+    auto* selectSourceAction = viewMenu->addAction(tr("Select &Source"));
+    connect(selectSourceAction, &QAction::triggered, this, &MainWindow::onShowSourceSelector);
 
     // Help menu
     auto* helpMenu = menuBar->addMenu(tr("&Help"));
@@ -185,6 +197,103 @@ void MainWindow::onAbout()
         tr("<h3>OpenScreen</h3>"
            "<p>Version 2.0.0</p>"
            "<p>Free, open-source screen recording &amp; editing</p>"));
+}
+
+void MainWindow::setupRecording()
+{
+    recordingSession_ = new RecordingSession(this);
+    hudOverlay_ = new HudOverlay(nullptr);  // top-level window
+    sourceSelector_ = new SourceSelector(this);
+
+    // HUD record toggle -> start/stop
+    connect(hudOverlay_, &HudOverlay::recordToggled, this,
+        [this](bool recording) {
+            if (recording) {
+                onStartRecording();
+            } else {
+                onStopRecording();
+            }
+        });
+
+    // HUD audio toggles
+    connect(hudOverlay_, &HudOverlay::micToggled,
+            recordingSession_, &RecordingSession::setMicrophoneEnabled);
+    connect(hudOverlay_, &HudOverlay::systemAudioToggled,
+            recordingSession_, &RecordingSession::setSystemAudioEnabled);
+
+    // Elapsed time -> HUD
+    connect(recordingSession_, &RecordingSession::elapsedTimeChanged,
+            hudOverlay_, &HudOverlay::setElapsedTime);
+
+    // Recording finished -> restore UI
+    connect(recordingSession_, &RecordingSession::recordingStopped,
+            this, &MainWindow::onRecordingStopped);
+
+    // Recording error -> status bar
+    connect(recordingSession_, &RecordingSession::recordingError, this,
+        [this](const QString& error) {
+            statusBar()->showMessage(tr("Recording error: %1").arg(error), 5000);
+        });
+
+    // Source selector -> select source
+    connect(sourceSelector_, &SourceSelector::sourceSelected, this,
+        [this](int index) {
+            auto sources = recordingSession_->enumerateSources();
+            if (index >= 0 && index < static_cast<int>(sources.size())) {
+                recordingSession_->selectSource(sources[index].id);
+                statusBar()->showMessage(
+                    tr("Source: %1").arg(QString::fromStdString(sources[index].name)),
+                    3000);
+            }
+        });
+}
+
+void MainWindow::onStartRecording()
+{
+    auto moviesDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    if (moviesDir.isEmpty()) {
+        moviesDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    }
+
+    auto timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
+    auto filePath = moviesDir + "/OpenScreen_" + timestamp + ".mp4";
+    auto outputPath = filePath.toStdString();
+
+    if (!recordingSession_->startRecording(outputPath)) {
+        statusBar()->showMessage(tr("Failed to start recording"), 3000);
+        return;
+    }
+
+    hide();
+    hudOverlay_->show();
+    statusBar()->showMessage(tr("Recording..."));
+}
+
+void MainWindow::onStopRecording()
+{
+    recordingSession_->stopRecording();
+}
+
+void MainWindow::onRecordingStopped(const QString& outputPath)
+{
+    hudOverlay_->hide();
+    show();
+    statusBar()->showMessage(
+        tr("Recording saved: %1").arg(outputPath), 5000);
+}
+
+void MainWindow::onShowSourceSelector()
+{
+    auto sources = recordingSession_->enumerateSources();
+    QList<QPair<QString, QPixmap>> sourceList;
+    sourceList.reserve(static_cast<int>(sources.size()));
+
+    for (const auto& src : sources) {
+        sourceList.append({QString::fromStdString(src.name), src.thumbnail});
+    }
+
+    sourceSelector_->setSources(sourceList);
+    sourceSelector_->show();
 }
 
 } // namespace openscreen

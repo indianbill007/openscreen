@@ -8,6 +8,10 @@ class QAction;
 
 namespace openscreen {
 
+class RecordingSession;
+class HudOverlay;
+class SourceSelector;
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -25,10 +29,16 @@ private slots:
     void onRedo();
     void onAbout();
 
+    void onStartRecording();
+    void onStopRecording();
+    void onRecordingStopped(const QString& outputPath);
+    void onShowSourceSelector();
+
 private:
     void createMenuBar();
     void createCentralArea();
     void createStatusBar();
+    void setupRecording();
 
     QSplitter* splitter_{nullptr};
     QWidget* preview_placeholder_{nullptr};
@@ -37,6 +47,10 @@ private:
 
     QAction* toggleTimelineAction_{nullptr};
     QAction* toggleSettingsAction_{nullptr};
+
+    RecordingSession* recordingSession_{nullptr};
+    HudOverlay* hudOverlay_{nullptr};
+    SourceSelector* sourceSelector_{nullptr};
 };
 
 } // namespace openscreen

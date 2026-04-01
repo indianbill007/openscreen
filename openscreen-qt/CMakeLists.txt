@@ -132,6 +132,20 @@ target_link_libraries(openscreen_core PUBLIC
     ${FFMPEG_LINK_LIBS}
 )
 
+# Platform-specific libraries for capture
+if(WIN32)
+    target_link_libraries(openscreen_core PUBLIC
+        d3d11
+        dxgi
+        ole32
+        windowsapp
+    )
+endif()
+
+target_compile_definitions(openscreen_core PUBLIC
+    $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+)
+
 # ---------------------------------------------------------------------------
 # Executable
 # ---------------------------------------------------------------------------
